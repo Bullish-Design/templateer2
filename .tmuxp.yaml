@@ -1,0 +1,16 @@
+session_name: Templateer2
+windows:
+  - window_name: Templateer2
+    layout: main-vertical
+    options:
+      main-pane-width: 20%
+    panes:
+      - shell_command:
+          - cd ~/Documents/Notes/Projects/Templateer2
+          # - nvim Notes.md ToDo.md
+          - open-project
+      - shell_command:
+          - tmux resizep -y 85%
+          - filelist-open "startup_files.txt" Templateer2
+        focus: true
+      - clear
