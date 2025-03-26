@@ -1,0 +1,7 @@
+{
+  "weather": {
+    "command": "python",
+    "args": ["-m", "mcp.server.fastmcp", "weather_server.py"],
+    "env": {"API_KEY": "demo_key"}
+  }
+}
