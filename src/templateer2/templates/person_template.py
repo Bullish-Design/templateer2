@@ -13,7 +13,7 @@ class Person(BaseModel):
 
 
 # /// template
-# output-file = "person_schema.md"
+# output-file = ".output/person_schema.md"
 # imports = ["helpers.py"]
 # reference-file = "./data/sample.json"
 # ///
