@@ -17,7 +17,7 @@ This script loads a template file containing:
 It renders the template using the Pydantic models and writes the output to a file.
 
 Usage:
-    uv run simplified_templateer.py --template=<template_file> --output=<output_dir>
+    uv run simplified_templateer.py --template=<template_file.mcpt> --output=<output_path>
 """
 
 from __future__ import annotations
@@ -39,6 +39,7 @@ class TemplateConfig(BaseModel):
     """Configuration extracted from the template header section."""
 
     output_file: Optional[str] = None
+    output: Optional[str] = None  # New parameter for relative path and filename
     extra_params: Dict[str, Any] = Field(default_factory=dict)
 
 
@@ -65,6 +66,12 @@ class TemplateFile:
 
         content = file_path.read_text()
 
+        # Check if this is the correct file type
+        if file_path.suffix.lower() != ".mcpt":
+            print(
+                f"Warning: File {file_path} doesn't have .mcpt extension. The file may not be parsed correctly."
+            )
+
         # Look for template section marker
         template_pattern = r"#\s*///\s*template\s*\n(.*?)#\s*///"
         template_match = re.search(template_pattern, content, re.DOTALL)
@@ -78,7 +85,9 @@ class TemplateFile:
         template_config_raw = template_match.group(1).strip()
         config_dict = cls._parse_template_config(template_config_raw)
         config = TemplateConfig(
-            output_file=config_dict.pop("output-file", None), extra_params=config_dict
+            output_file=config_dict.pop("output-file", None),
+            output=config_dict.pop("output", None),
+            extra_params=config_dict,
         )
 
         # Everything before the template section is Python code
@@ -255,8 +264,19 @@ class TemplateRenderer:
         return context
 
 
-def process_template(template_path: Path, output_dir: Path) -> Path:
-    """Process a template file and generate output."""
+def process_template(template_path: Path, output_arg: Optional[Path]) -> Path:
+    """Process a template file and generate output.
+
+    Args:
+        template_path: Path to the template file
+        output_arg: Optional CLI output argument (directory or full path)
+
+    Returns:
+        Path to the generated output file
+
+    Raises:
+        ValueError: If no output path can be determined
+    """
     # Parse template file
     template_file = TemplateFile.from_file(template_path)
 
@@ -272,14 +292,42 @@ def process_template(template_path: Path, output_dir: Path) -> Path:
     renderer = TemplateRenderer()
     rendered_content = renderer.render(template_file, module_info)
 
-    # Determine output filename
-    output_filename = template_file.config.output_file or template_path.stem + ".md"
+    # Get the template file's directory for relative paths
+    template_dir = template_path.parent.absolute()
 
-    # Create output directory
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # Determine output path based on priority rules
+    if output_arg is not None:
+        # CLI argument takes precedence
+        if output_arg.is_absolute():
+            # If it's an absolute path, use it directly
+            output_path = output_arg
+        else:
+            # If it's a relative path, make it relative to the current directory
+            output_path = Path.cwd() / output_arg
+
+        # If it's a directory, append filename from template or default
+        if not output_path.suffix:  # No file extension means it's a directory
+            output_filename = (
+                template_file.config.output_file or template_path.stem + ".md"
+            )
+            output_path = output_path / output_filename
+
+    elif template_file.config.output:  # Next, check for 'output' parameter in template
+        # This is a relative path including filename, relative to the template file
+        output_path = template_dir / template_file.config.output
+    elif template_file.config.output_file:  # Next, check for 'output-file' parameter
+        # This is just a filename, in the same directory as the template
+        output_path = template_dir / template_file.config.output_file
+    else:
+        # No output location specified
+        raise ValueError(
+            "No output path specified. Use --output argument or 'output' parameter in template."
+        )
+
+    # Create parent directory if needed
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Write output file
-    output_path = output_dir / output_filename
     output_path.write_text(rendered_content)
 
     print(f"Template rendered successfully to {output_path}")
@@ -295,7 +343,10 @@ def parse_args():
         "--template", required=True, type=Path, help="Path to the template file"
     )
     parser.add_argument(
-        "--output", required=True, type=Path, help="Path to the output directory"
+        "--output",
+        required=False,
+        type=Path,
+        help="Path to the output directory or file (overrides template output setting)",
     )
     return parser.parse_args()
 
